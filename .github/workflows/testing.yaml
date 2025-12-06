@@ -1,37 +1,402 @@
 name: Free Disk Space (Ubuntu)
+
 on:
   push:
     branches:
       - main
     paths-ignore:
-      - '*.md'
-  
+      - "*.md"
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+  schedule:
+    # Runs every 15 days at 02:00 UTC
+    - cron: '0 2 */15 * *'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  free_disk_space:
-    strategy:
-      matrix:
-        os: [
-          ubuntu-latest, 
-          #ubuntu-22.04, 
-          #ubuntu-20.04
-        ]
-    runs-on: ${{ matrix.os }}
+  # Step 1: Linter
+  shellcheck:
+    name: "🔍 Bashscript Linter"
+    runs-on: ubuntu-latest
     steps:
-      - name: Free Disk Space
-        uses: endersonmenezes/free-disk-space@main
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install ShellCheck
+        run: sudo apt-get install shellcheck -y
+
+      - name: Run ShellCheck
+        run: shellcheck main.sh -o all -e SC2033,SC2032
+  
+  # Step 2: Search biggest folders (historical reference)
+  search_biggest_folders:
+    name: "📂 Search Biggest Folders"
+    needs: shellcheck
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
+    uses: ./.github/workflows/search-folders-template.yaml
+
+  # Step 3: Quick tests (for PRs)
+  quick_test_dotnet:
+    needs: shellcheck
+    if: github.event_name == 'pull_request'
+    uses: ./.github/workflows/quick-test-template.yaml
+    with:
+      job_name: "Quick .NET test"
+      remove_dotnet: true
+
+  quick_test_android:
+    needs: shellcheck
+    if: github.event_name == 'pull_request'
+    uses: ./.github/workflows/quick-test-template.yaml
+    with:
+      job_name: "Quick Android test"
+      remove_android: true
+
+  quick_test_packages:
+    needs: shellcheck
+    if: github.event_name == 'pull_request'
+    uses: ./.github/workflows/quick-test-template.yaml
+    with:
+      job_name: "Quick packages test"
+      remove_packages: "azure-cli google-cloud-cli firefox"
+      remove_packages_one_command: true
+
+  quick_test_testing_mode:
+    needs: shellcheck
+    if: github.event_name == 'pull_request'
+    uses: ./.github/workflows/quick-test-template.yaml
+    with:
+      job_name: "Testing mode"
+      testing: true
+
+  # Step 4: Main tests (feature tests)
+  test_basic:
+    needs: [shellcheck, search_biggest_folders]
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
+    uses: ./.github/workflows/test-template.yaml
+    with:
+      job_name: "Basic test"
+      remove_android: true
+      remove_dotnet: true
+
+  test_full:
+    needs: [shellcheck, search_biggest_folders]
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
+    uses: ./.github/workflows/test-template.yaml
+    with:
+      job_name: "Full cleanup"
+      remove_android: true
+      remove_dotnet: true
+      remove_haskell: true
+      remove_tool_cache: true
+      remove_swap: true
+      remove_packages: "azure-cli google-cloud-cli microsoft-edge-stable google-chrome-stable firefox"
+      remove_packages_one_command: true
+      remove_folders: "/usr/share/swift /usr/share/miniconda"
+
+  # Package removal test (one command)
+  test_packages_one_command:
+    needs: [shellcheck, search_biggest_folders]
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
+    uses: ./.github/workflows/test-template.yaml
+    with:
+      job_name: "Packages one command"
+      remove_packages: "postgresql* temurin-* *llvm* mysql* dotnet-sdk-*"
+      remove_packages_one_command: true
+
+  # Package removal test (individual commands)
+  test_packages_individual:
+    needs: [shellcheck, search_biggest_folders]
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
+    uses: ./.github/workflows/test-template.yaml
+    with:
+      job_name: "Packages individual"
+      remove_packages: "postgresql* temurin-* *llvm*"
+      remove_packages_one_command: false
+
+  # Folders removal test
+  test_folders:
+    needs: [shellcheck, search_biggest_folders]
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
+    uses: ./.github/workflows/test-template.yaml
+    with:
+      job_name: "Folders removal"
+      remove_folders: "/usr/local/lib/node_modules /usr/local/share/chromium /usr/local/share/powershell"
+
+  # Tool cache and swap test
+  test_tool_cache_swap:
+    needs: [shellcheck, search_biggest_folders]
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
+    uses: ./.github/workflows/test-template.yaml
+    with:
+      job_name: "Tool cache and swap"
+      remove_tool_cache: true
+      remove_swap: true
+
+  # Test Haskell removal specifically
+  test_haskell:
+    needs: [shellcheck, search_biggest_folders]
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
+    uses: ./.github/workflows/test-template.yaml
+    with:
+      job_name: "Haskell removal"
+      remove_haskell: true
+
+  # Large removal test
+  test_large_removal:
+    needs: [shellcheck, search_biggest_folders]
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
+    uses: ./.github/workflows/test-template.yaml
+    with:
+      job_name: "Large removal"
+      remove_android: true
+      remove_dotnet: true
+      remove_haskell: true
+      remove_tool_cache: true
+      remove_swap: true
+      remove_packages: "azure-cli google-cloud-cli microsoft-edge-stable google-chrome-stable firefox postgresql* temurin-* *llvm* mysql* dotnet-sdk-* julia*"
+      remove_packages_one_command: true
+      remove_folders: "/usr/share/swift /usr/share/miniconda /usr/share/az* /usr/share/glade* /usr/local/lib/node_modules /usr/local/share/chromium /usr/local/share/powershell /usr/local/julia /usr/local/aws-cli /usr/local/aws-sam-cli /usr/share/gradle"
+
+  # Step 5: Individual folder tests (for Size Savings table)
+  test_folder_swift:
+    needs: [shellcheck, search_biggest_folders]
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
+    uses: ./.github/workflows/test-template.yaml
+    with:
+      job_name: "Folder /usr/share/swift"
+      remove_folders: "/usr/share/swift"
+
+  test_folder_miniconda:
+    needs: [shellcheck, search_biggest_folders]
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
+    uses: ./.github/workflows/test-template.yaml
+    with:
+      job_name: "Folder /usr/share/miniconda"
+      remove_folders: "/usr/share/miniconda"
+
+  test_folder_az:
+    needs: [shellcheck, search_biggest_folders]
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
+    uses: ./.github/workflows/test-template.yaml
+    with:
+      job_name: "Folder /usr/share/az"
+      remove_folders: "/usr/share/az*"
+
+  test_folder_node_modules:
+    needs: [shellcheck, search_biggest_folders]
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
+    uses: ./.github/workflows/test-template.yaml
+    with:
+      job_name: "Folder /usr/local/lib/node_modules"
+      remove_folders: "/usr/local/lib/node_modules"
+
+  test_folder_chromium:
+    needs: [shellcheck, search_biggest_folders]
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
+    uses: ./.github/workflows/test-template.yaml
+    with:
+      job_name: "Folder: /usr/local/share/chromium"
+      remove_folders: "/usr/local/share/chromium"
+
+  test_folder_powershell:
+    needs: [shellcheck, search_biggest_folders]
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
+    uses: ./.github/workflows/test-template.yaml
+    with:
+      job_name: "Folder /usr/local/share/powershell"
+      remove_folders: "/usr/local/share/powershell"
+
+  test_folder_aws_cli:
+    needs: [shellcheck, search_biggest_folders]
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
+    uses: ./.github/workflows/test-template.yaml
+    with:
+      job_name: "Folder /usr/local/aws-cli"
+      remove_folders: "/usr/local/aws-cli"
+
+  test_folder_aws_sam_cli:
+    needs: [shellcheck, search_biggest_folders]
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
+    uses: ./.github/workflows/test-template.yaml
+    with:
+      job_name: "Folder /usr/local/aws-sam-cli"
+      remove_folders: "/usr/local/aws-sam-cli"
+
+  test_folder_julia:
+    needs: [shellcheck, search_biggest_folders]
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
+    uses: ./.github/workflows/test-template.yaml
+    with:
+      job_name: "Folder /usr/local/julia"
+      remove_folders: "/usr/local/julia"
+
+  test_folder_gradle:
+    needs: [shellcheck, search_biggest_folders]
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
+    uses: ./.github/workflows/test-template.yaml
+    with:
+      job_name: "Folder /usr/share/gradle"
+      remove_folders: "/usr/share/gradle"
+
+  test_folder_glade:
+    needs: [shellcheck, search_biggest_folders]
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
+    uses: ./.github/workflows/test-template.yaml
+    with:
+      job_name: "Folder /usr/share/glade"
+      remove_folders: "/usr/share/glade*"
+
+  # Step 6: Consolidated Summary
+  consolidated_summary:
+    name: "📊 Test Summary Report"
+    runs-on: ubuntu-latest
+    if: always() && (github.event_name == 'push' || github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || github.event_name == 'pull_request')
+    needs: 
+      - test_basic
+      - test_full
+      - test_packages_one_command
+      - test_packages_individual
+      - test_folders
+      - test_tool_cache_swap
+      - test_haskell
+      - test_large_removal
+      - quick_test_dotnet
+      - quick_test_android
+      - quick_test_packages
+      - quick_test_testing_mode
+      - test_folder_swift
+      - test_folder_miniconda
+      - test_folder_az
+      - test_folder_node_modules
+      - test_folder_chromium
+      - test_folder_powershell
+      - test_folder_aws_cli
+      - test_folder_aws_sam_cli
+      - test_folder_julia
+      - test_folder_gradle
+      - test_folder_glade
+    steps:
+      - name: Download all test summaries
+        uses: actions/download-artifact@v4
         with:
-          remove_android: true
-          remove_dotnet: true
-          remove_haskell: true
-          remove_tool_cache: true
-          remove_swap: true
-          remove_packages: "azure-cli google-cloud-cli microsoft-edge-stable google-chrome-stable firefox postgresql* dotnet* temurin-* *llvm* mysql*"
-          testing: false
+          pattern: test-summary-*
+          path: all-summaries
+          merge-multiple: true
 
-      - name: Show all packages by size
+      - name: Generate consolidated report
         run: |
-          dpkg-query -Wf '${Installed-Size}\t${Package}\n' | sort -n
-
-      - name: Show free disk space
-        run: df -h
+          echo "# 📊 Free Disk Space - Test Results Summary" > $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Workflow:** ${{ github.workflow }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Run:** #${{ github.run_number }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Triggered by:** ${{ github.event_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Date:** $(date -u +%Y-%m-%d\ %H:%M:%S) UTC" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          # Verifica se existem summaries
+          if [ ! -d "all-summaries" ] || [ -z "$(ls -A all-summaries 2>/dev/null)" ]; then
+            echo "⚠️ No test summaries found" >> $GITHUB_STEP_SUMMARY
+            exit 0
+          fi
+          
+          echo "## 📈 Results by Test Type" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          # Processa os arquivos JSON
+          for json_file in all-summaries/*.json; do
+            if [ -f "$json_file" ]; then
+              JOB_NAME=$(jq -r '.job_name' "$json_file")
+              RUNNER=$(jq -r '.runner' "$json_file")
+              RM_CMD=$(jq -r '.rm_cmd' "$json_file")
+              FREED=$(jq -r '.freed_space_gb' "$json_file")
+              INITIAL=$(jq -r '.initial_space_gb' "$json_file")
+              FINAL=$(jq -r '.final_space_gb' "$json_file")
+              DURATION=$(jq -r '.duration_seconds' "$json_file")
+              
+              # Cria seção para cada teste
+              echo "### 🧪 $JOB_NAME" >> $GITHUB_STEP_SUMMARY
+              echo "" >> $GITHUB_STEP_SUMMARY
+              echo "| Metric | Value |" >> $GITHUB_STEP_SUMMARY
+              echo "|--------|-------|" >> $GITHUB_STEP_SUMMARY
+              echo "| **Runner** | \`$RUNNER\` |" >> $GITHUB_STEP_SUMMARY
+              echo "| **Removal Command** | \`$RM_CMD\` |" >> $GITHUB_STEP_SUMMARY
+              echo "| **Initial Space** | ${INITIAL} GB |" >> $GITHUB_STEP_SUMMARY
+              echo "| **Final Space** | ${FINAL} GB |" >> $GITHUB_STEP_SUMMARY
+              echo "| **Duration** | ${DURATION}s |" >> $GITHUB_STEP_SUMMARY
+              
+              # Calcula e formata o espaço liberado
+              if [ "$FREED" -gt 0 ]; then
+                echo "| **Space Freed** | ✅ **${FREED} GB** |" >> $GITHUB_STEP_SUMMARY
+              elif [ "$FREED" -lt 0 ]; then
+                echo "| **Space Freed** | ⚠️ **${FREED} GB** (negative) |" >> $GITHUB_STEP_SUMMARY
+              else
+                echo "| **Space Freed** | ℹ️ **${FREED} GB** |" >> $GITHUB_STEP_SUMMARY
+              fi
+              
+              echo "" >> $GITHUB_STEP_SUMMARY
+              
+              # Mostra opções ativas
+              echo "<details>" >> $GITHUB_STEP_SUMMARY
+              echo "<summary>📋 Configuration Options</summary>" >> $GITHUB_STEP_SUMMARY
+              echo "" >> $GITHUB_STEP_SUMMARY
+              echo "\`\`\`json" >> $GITHUB_STEP_SUMMARY
+              jq '.options' "$json_file" >> $GITHUB_STEP_SUMMARY
+              echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+              echo "" >> $GITHUB_STEP_SUMMARY
+              echo "</details>" >> $GITHUB_STEP_SUMMARY
+              echo "" >> $GITHUB_STEP_SUMMARY
+            fi
+          done
+          
+          # Estatísticas gerais
+          echo "## 📊 Overall Statistics" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          TOTAL_TESTS=$(ls -1 all-summaries/*.json 2>/dev/null | wc -l)
+          TOTAL_FREED=$(jq -s 'map(.freed_space_gb) | add' all-summaries/*.json)
+          AVG_FREED=$(jq -s 'map(.freed_space_gb) | add / length' all-summaries/*.json)
+          MAX_FREED=$(jq -s 'map(.freed_space_gb) | max' all-summaries/*.json)
+          MIN_FREED=$(jq -s 'map(.freed_space_gb) | min' all-summaries/*.json)
+          
+          echo "| Statistic | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|-----------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Total Tests | $TOTAL_TESTS |" >> $GITHUB_STEP_SUMMARY
+          echo "| Total Space Freed | ${TOTAL_FREED} GB |" >> $GITHUB_STEP_SUMMARY
+          echo "| Average Freed per Test | ${AVG_FREED} GB |" >> $GITHUB_STEP_SUMMARY
+          echo "| Maximum Freed | ${MAX_FREED} GB |" >> $GITHUB_STEP_SUMMARY
+          echo "| Minimum Freed | ${MIN_FREED} GB |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          # Comparação rm vs rmz
+          echo "## ⚡ Performance Comparison: rm vs rmz" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          RM_AVG=$(jq -s 'map(select(.rm_cmd == "rm") | .freed_space_gb) | add / length' all-summaries/*.json)
+          RMZ_AVG=$(jq -s 'map(select(.rm_cmd == "rmz") | .freed_space_gb) | add / length' all-summaries/*.json)
+          
+          echo "| Command | Average Space Freed |" >> $GITHUB_STEP_SUMMARY
+          echo "|---------|---------------------|" >> $GITHUB_STEP_SUMMARY
+          echo "| \`rm\` | ${RM_AVG} GB |" >> $GITHUB_STEP_SUMMARY
+          echo "| \`rmz\` | ${RMZ_AVG} GB |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          # Comparação por runner
+          echo "## 🖥️ Results by Runner" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          for runner in $(jq -r '.runner' all-summaries/*.json | sort -u); do
+            RUNNER_AVG=$(jq -s --arg runner "$runner" 'map(select(.runner == $runner) | .freed_space_gb) | add / length' all-summaries/*.json)
+            RUNNER_COUNT=$(jq -s --arg runner "$runner" 'map(select(.runner == $runner)) | length' all-summaries/*.json)
+            
+            echo "- **$runner**: ${RUNNER_AVG} GB average (${RUNNER_COUNT} tests)" >> $GITHUB_STEP_SUMMARY
+          done
+          
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "---" >> $GITHUB_STEP_SUMMARY
+          echo "*Generated automatically by Free Disk Space test suite*" >> $GITHUB_STEP_SUMMARY
