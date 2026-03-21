@@ -19,12 +19,15 @@ A GitHub Action to free disk space on Ubuntu runners by removing unnecessary sof
 - [Size Savings](#size-savings)
 - [FAQ](#faq)
 - [Contributing](#contributing)
-- [Changelog](#changelog)
+- [Changelog](CHANGELOG.md)
 
 ## Compatibility
 
-- Ubuntu 22.04 - Tested on 21/08/2025.
-- Ubuntu Latest (24.04) - Tested on 30/10/2025.
+![Ubuntu 22.04](https://img.shields.io/badge/Ubuntu_22.04-supported-green?logo=ubuntu&logoColor=white)
+![Ubuntu 24.04](https://img.shields.io/badge/Ubuntu_24.04_(Latest)-supported-green?logo=ubuntu&logoColor=white)
+![Ubuntu 24.04 ARM64](https://img.shields.io/badge/Ubuntu_24.04_ARM64-supported-green?logo=ubuntu&logoColor=white)
+
+All runners are tested on every push via the [CI workflow](https://github.com/endersonmenezes/free-disk-space/actions/workflows/testing.yaml).
 
 ## Available Options
 
@@ -178,39 +181,43 @@ For faster file deletion, you can use `rmz` instead of the default `rm` command:
 
 ## Size Savings
 
-`Updated at: 30/10/2025 - Based on Run #197`
+`Updated at: 03/03/2026 - Based on Run #234`
 
 ### Ubuntu Latest (x86_64)
 
 | Option | Size Freed | Time (rm) | Time (rmz) | Notes |
 |--------|------------|-----------|------------|-------|
-| `remove_android` | ~10 GB | 54s | 13s | Part of Basic test |
-| `remove_dotnet` | ~3 GB | Included | Included | Part of Basic test |
-| `remove_haskell` | 6 GB | 14s | 3s | ⚡ **78% faster with rmz** |
-| `remove_tool_cache` | 5 GB | 83s | 27s | ⚡ **67% faster with rmz** |
+| `remove_android` | ~10 GB | 50s | 6s | Part of Basic test |
+| `remove_dotnet` | ~4 GB | 13s | 6s | Part of Basic test |
+| `remove_haskell` | 4 GB | 6s | 6s | |
+| `remove_tool_cache` | 6 GB | 32s | 22s | ⚡ **31% faster with rmz** |
 | `remove_swap` | - | - | - | Included in tool_cache test |
-| `remove_packages` (example) | 5 GB | 69s | 43s | postgresql*, temurin-*, *llvm*, mysql*, dotnet-sdk-* |
-| **Full cleanup** | **31 GB** | **184s** | **238s** | All options enabled |
-| **Large removal** | **38 GB** | **538s** | **344s** | ⚡ **36% faster with rmz** |
+| `remove_packages` (example) | 6 GB | 17s | 19s | postgresql*, temurin-*, *llvm*, mysql*, dotnet-sdk-* |
+| **Full cleanup** | **33 GB** | **204s** | **153s** | ⚡ **25% faster with rmz** |
+| **Large removal** | **41 GB** | **467s** | **167s** | ⚡ **64% faster with rmz** |
 
 ### Ubuntu 24.04 ARM64
 
 | Option | Size Freed | Time (rm) | Time (rmz) | Notes |
 |--------|------------|-----------|------------|-------|
 | `remove_android` | 0 GB | - | - | Not available on ARM |
-| `remove_dotnet` | 0 GB | - | - | Not available on ARM |
+| `remove_dotnet` | 4 GB | 27s | 7s | Via /usr/share/dotnet folder |
 | `remove_haskell` | 0 GB | - | - | Not available on ARM |
 | `remove_tool_cache` | 0 GB | - | - | Not available on ARM |
-| `remove_packages` (example) | 4 GB | 80s | 67s | ⚡ **16% faster with rmz** |
-| **Full cleanup** | **3 GB** | **22s** | **45s** | Limited packages on ARM |
-| **Large removal** | **6 GB** | **66s** | **82s** | Limited packages on ARM |
+| `remove_packages` (example) | 2 GB | 38s | 35s | postgresql*, temurin-*, *llvm* |
+| **Full cleanup** | **9 GB** | **23s** | **27s** | More packages now pre-installed on ARM |
+| **Large removal** | **16 GB** | **35s** | **28s** | ⚡ **20% faster with rmz** |
 
 ### Individual Folders (Both Architectures)
 
 | Folder | Ubuntu Latest | Ubuntu ARM | Time (rm) | Time (rmz) | Notes |
 |--------|---------------|------------|-----------|------------|-------|
-| `/usr/share/swift` | 3 GB | 3 GB | 2s / 6s | 5s / 6s | Consistent across archs |
-| `/usr/local/share/powershell` | 1 GB | 1 GB | 2s / 7s | 2s / 6s | ~1.2 GB |
+| `/usr/local/lib/android` | 10 GB | 0 GB | 50s / 8s | 6s / 5s | ⚡ **88% faster with rmz** |
+| `/opt/hostedtoolcache` | 6 GB | 0 GB | 32s / 11s | 22s / 13s | Not available on ARM |
+| `/usr/share/dotnet` | 4 GB | 4 GB | 13s / 27s | 6s / 7s | Consistent across archs |
+| `/usr/share/swift` | 4 GB | 3 GB | 4s / 7s | 3s / 7s | Consistent across archs |
+| `/usr/local/.ghcup` | 4 GB | 0 GB | 2s / 6s | 5s / 8s | Not available on ARM |
+| `/usr/local/share/powershell` | 2 GB | 1 GB | 1s / 6s | 2s / 10s | ~1.2 GB |
 | `/usr/local/lib/node_modules` | 0 GB | 1 GB | 15s / 20s | 10s / 22s | ~463 MB |
 | `/usr/share/az*` | 0 GB | 1 GB | 6s / 8s | 3s / 6s | Azure CLI (~495 MB) |
 | `/usr/share/miniconda` | 0 GB | 0 GB | 18s / 5s | 5s / 6s | ~736 MB (when present) |
@@ -264,12 +271,12 @@ remove_folders: "/usr/share/swift /usr/local/share/powershell /usr/local/lib/nod
 
 ### Performance Notes
 
-- ⚡ **rmz is significantly faster** for large operations (up to 78% faster on Haskell removal)
-- 🔧 **ARM runners have fewer pre-installed packages** (49 GB initial vs 23 GB on x86_64)
-- 📊 **Full cleanup on x86_64** can free up to **38 GB** with Large removal
+- ⚡ **rmz is significantly faster** for large operations (up to 88% faster on Android folder, 64% on Large removal)
+- 🔧 **ARM runners now have more pre-installed software**, freeing up to 16 GB with Large removal
+- 📊 **Full cleanup on x86_64** can free up to **41 GB** with Large removal
 - 🎯 **For maximum speed**: Use `rmz` with `remove_packages_one_command: true`
 
-_The time can vary according to multiple factors. These measurements are based on [Run #197](https://github.com/endersonmenezes/free-disk-space/actions/runs/18948864052)_
+_The time can vary according to multiple factors. These measurements are based on [Run #234](https://github.com/endersonmenezes/free-disk-space/actions/runs/22636404159)_
 
 _In our action you can see more folders and packages to delete, but it is your responsibility to know what you are doing._
 
@@ -316,67 +323,9 @@ We welcome contributions! Whether you're fixing bugs, adding features, or improv
 
 This project, despite being on my personal profile purely formally, is part of an NGO we have in Brazil, responsible for helping young people and adults learn to program and tackle real-world projects. Learn more at [codaqui.dev](https://codaqui.dev).
 
-## Changelog (YYYY-MM-DD)
+## Changelog
 
-### v3.1.0 (2025-12-08)
-
-**CI/CD Improvements:**
-- 🔧 Changed linter runner from `ubuntu-latest` to `ubuntu-slim` for faster execution
-- 📊 Enhanced `search_biggest` job with multi-runner matrix (`ubuntu-24.04`, `ubuntu-22.04`, `ubuntu-24.04-arm`, `ubuntu-slim`)
-- 📦 Added listing of top 50 packages by size and biggest files in key directories
-
-**Test Reorganization:**
-- 🧪 Added use case-based tests: Docker Build, Python/ML, Node.js, Java/JVM, Remove Browsers, Remove Cloud CLIs, Remove LLVM
-- 🗂️ Replaced low-impact folder tests with high-impact ones (`/opt/hostedtoolcache`, `/usr/share/dotnet`, `/usr/local/.ghcup`, `/usr/local/lib/android`)
-
-**Cleanup:**
-- 🧹 Centralized package size listing in `search_biggest` job
-
-### v3.0.0 (2025-10-30) 🚀
-
-**New Features:**
-- ✨ Added `rmz` support for faster file deletion (up to 3x faster)
-  - ✨ Added `rm_cmd` and `rmz_version` inputs
-  - 🔧 Multi-architecture support for rmz (x86_64 and aarch64)
-- 🛠️ DevContainer configuration for easy development
-- ✅ Pre-commit hooks with shellcheck and actionlint
-- 📝 Enhanced documentation with examples and troubleshooting
-
-**Improvements:**
-- 🔧 Better error handling and validation
-- 🔧 Improved testing mode (echo commands instead of alias)
-- 📦 Reusable workflow templates for testing
-
-**Bug Fixes:**
-- 🐛 Fixed bc validation to exit gracefully instead of failing
-- 🐛 Improved permission handling in testing mode
-
-**Special Thanks:**
-- [fbnrst](https://github.com/fbnrst) for contributions, ideas, and testing!
-
-### v2.1.1 (2025-08-21)
-
-**Improvements:**
-- Streamlined BC verification
-- Improved testing mode
-- Better error messages
-
-### v2.0.0
-
-**Features:**
-- Package removal support
-- Folder removal support
-- Enhanced disk space reporting
-- Testing mode for local development
-
-### v1.0.0
-
-**Initial Release:**
-- Android library removal
-- .NET library removal
-- Haskell library removal
-- Tool cache removal
-- Swap storage removal
+See [CHANGELOG.md](CHANGELOG.md) for the full version history.
 
 ## License
 
